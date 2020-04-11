@@ -12,10 +12,10 @@ import torch
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import StepLR
 
-# import apex
+import apex
 import tensorboardX
 
-from model.utils.misc import str2bool, check_mkdir, save_torch_img, fix_model_state_dict, chop_forward, debug_set
+from model.utils.misc import str2bool, check_mkdir, save_torch_img, fix_model_state_dict, chop_forward, debug_set, save_args
 from model.config import cfg
 from model.modeling.build_model import build_model
 from model.data.transforms.data_preprocessing import TrainAugmentation, EvaluateAugmentation, MiniTrainAugmentation
@@ -107,12 +107,6 @@ def train(args, cfg):
     
     do_train(args, cfg, model, optimizer, d_optimizer, train_loader, eval_loader, minitrain_loader, device, summary_writer, g_scheduler, d_scheduler)
 
-
-def save_args(args,file_path="args_data.json"):
-    with open(file_path, 'w') as f:
-        json.dump(args.__dict__, f, indent=2)
-
-
 def main():
     parser = argparse.ArgumentParser(description='Perceptual Extreme Super-Resolution for NTIRE2020')
     parser.add_argument('--config_file', type=str, default='', metavar='FILE', help='path to config file')
@@ -130,26 +124,30 @@ def main():
 
     args = parser.parse_args()
 
+    # load configration file
     if len(args.config_file) > 0:
         print('Loaded configration file {}'.format(args.config_file))
         cfg.merge_from_file(args.config_file)
 
+    # define output folder name for save log
     if len(args.output_dirname) == 0:
         dt_now = datetime.datetime.now()
         output_dirname = str(dt_now.date()) + '_' + str(dt_now.time())
     else:
         output_dirname = args.output_dirname
     cfg.OUTPUT_DIR = os.path.join(cfg.OUTPUT_DIR, output_dirname)
-    
+    cfg.freeze()
+
+    # save configration
     if not os.path.exists(cfg.OUTPUT_DIR):
         os.makedirs(cfg.OUTPUT_DIR)
 
     if len(args.config_file) > 0:
         shutil.copy(args.config_file,cfg.OUTPUT_DIR)
-    
     argsfile_path = os.path.join(cfg.OUTPUT_DIR, "args.txt")
     save_args(args,argsfile_path)
-    cfg.freeze()
+
+    # setting for cuda
     torch.manual_seed(cfg.SEED)
     cuda = torch.cuda.is_available()
     if cuda:
@@ -159,6 +157,7 @@ def main():
 
     print('Running with config:\n{}'.format(cfg))
 
+    # train model
     train(args, cfg)
     
 

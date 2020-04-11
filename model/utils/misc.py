@@ -5,6 +5,7 @@ from collections import OrderedDict
 from functools import reduce
 import torch
 import cv2
+import json
 import collections
 
 
@@ -16,6 +17,9 @@ def check_mkdir(path):
     if not os.path.exists(os.path.dirname(path)):
         os.makedirs(os.path.dirname(path))
 
+def save_args(args,file_path="args_data.json"):
+    with open(file_path, 'w') as f:
+        json.dump(args.__dict__, f, indent=2)
 
 def save_torch_img(image, save_path, center_crop=False, heatmap=None):
     check_mkdir(save_path)
