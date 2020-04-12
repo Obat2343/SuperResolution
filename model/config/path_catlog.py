@@ -1,7 +1,7 @@
 import os
 
 class DatasetCatalog:
-    DATA_DIR = 'Dataset'
+    DATA_DIR = '/misc/dl001/dataset'
     DATASETS = {
         'div8k_train': {
             'data_dir': 'DIV8K/train'

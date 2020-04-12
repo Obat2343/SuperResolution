@@ -57,7 +57,7 @@ class DBPN(nn.Module):
         	    if m.bias is not None:
         		    m.bias.data.zero_()
             
-    def forward(self, x):
+    def forward(self, x, only_last=None):
         x = self.feat0(x)
         x = self.feat1(x)
         
@@ -160,7 +160,7 @@ class DBPN_LL(nn.Module):
         	    if m.bias is not None:
         		    m.bias.data.zero_()
             
-    def forward(self, x):
+    def forward(self, x, only_last=None):
         x = self.feat0(x)
         x = self.feat1(x)
         
@@ -218,7 +218,6 @@ class DBPN_LL(nn.Module):
         
         concat_h = torch.cat((h, concat_h),1)
         x = self.output_conv(concat_h)
-        
         return x
 
 class DBPN_Custom(nn.Module):
@@ -279,7 +278,7 @@ class DBPN_Custom(nn.Module):
         	    if m.bias is not None:
         		    m.bias.data.zero_()
             
-    def forward(self, x):
+    def forward(self, x, only_last=None):
         x = self.feat0(x)
         x = self.feat1(x)
         concat_l = None
