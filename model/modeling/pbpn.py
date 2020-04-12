@@ -25,6 +25,7 @@ class PBPN_Re(nn.Module):
         ps_block = cfg.MODEL.PS_MODULE
         inception_block = cfg.MODEL.INCEPTION_MODULE
         reconstruction = cfg.MODEL.RECONSTRUCTION
+        
         if reconstruction:
             self.bicubic = torch.nn.Upsample(scale_factor=16, mode='bicubic')
         else:

@@ -3,6 +3,7 @@ import torch.nn as nn
 from torch.autograd import grad as torch_grad
 
 from .pbpn import PBPN, PBPN_Re
+from .dbpn import DBPN, DBPN_LL, DBPN_Custom
 from .discriminator import Discriminator, LargeDiscriminator, UNetDiscriminator, Discriminator128, Discriminator256, Discriminator512, AllUNetDiscriminator, AllUNetDiscriminatorPixelshuffle
 
 class MODEL(nn.Module):
@@ -125,13 +126,19 @@ class MODEL(nn.Module):
 
 
 def build_model(cfg, pretrain=False):
+    if cfg.MODEL.BASE_MODEL_NAME == 'pbpn':
+        generator = PBPN(cfg)
+    elif cfg.MODEL.BASE_MODEL_NAME == 'pbpn-re':
+        generator = PBPN_Re(cfg)
+    elif cfg.MODEL.BASE_MODEL_NAME == 'dbpn-custom':
+        generator = DBPN_Custom(cfg)
+    elif cfg.MODEL.BASE_MODEL_NAME == 'dbpn-ll':
+        generator = DBPN_LL(cfg)
+    elif cfg.MODEL.BASE_MODEL_NAME == 'dbpn':
+        generator = DBPN(cfg)
+
     if pretrain:
-        if cfg.MODEL.BICUBIC_RESIDUAL:
-            print('bicubic residual model')
-            return MODEL(cfg, PBPN_Re(cfg))
-        else:
-            print('normal model')
-            return MODEL(cfg, PBPN(cfg))
+        return MODEL(cfg, generator)
     else:
         discriminator_name_list = list(cfg.SOLVER.DISCRIMINATOR_TYPE)
         discriminator_name_list.sort()
@@ -162,9 +169,4 @@ def build_model(cfg, pretrain=False):
         print('discriminator list')
         print(discriminator_list)
 
-        if cfg.MODEL.BICUBIC_RESIDUAL:
-            print('bicubic residual model')
-            return MODEL(cfg, PBPN_Re(cfg), discriminator=nn.ModuleList(discriminator_list))
-        else:
-            print('normal model')
-            return MODEL(cfg, PBPN(cfg), discriminator=nn.ModuleList(discriminator_list))           
+        return MODEL(cfg, generator, discriminator=nn.ModuleList(discriminator_list))
