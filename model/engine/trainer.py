@@ -14,12 +14,10 @@ from .loss_functions import Generator_Loss, Discriminator_Loss
 
 def do_train(args, cfg, model, optimizer, d_optimizer, train_loader, eval_loader, minitrain_loader, device, summary_writer, g_scheduler, d_scheduler):
     max_iter = len(train_loader)
-    start_training_time = time.time()
     trained_time = 0
-    discriminator_name_list = list(cfg.SOLVER.DISCRIMINATOR_TYPE)
+    discriminator_name_list = list(cfg.DIS.NAME)
     discriminator_name_list.sort()
     print(discriminator_name_list)
-    db = debug_set(cfg.OUTPUT_DIR, cfg.DEBUG.PRINT,cfg.DEBUG.WRITE)
 
     logging_dict = {}
     logging_dict['/train_disc/D_loss'] = 0
@@ -42,19 +40,6 @@ def do_train(args, cfg, model, optimizer, d_optimizer, train_loader, eval_loader
 
     loss_fn = Generator_Loss(args, cfg).to(device)
     d_loss_fn = Discriminator_Loss(args, cfg).to(device)
-  
-
-    # if 'UNet' in discriminator_name_list:
-    #     d_loss_fn = U_Discriminator_Loss(args, cfg).to(device)
-    #     loss_fn = U_Generator_Loss(args, cfg).to(device)
-    # else:
-    #     if cfg.SOLVER.MIXUP == True:
-    #         d_loss_fn = nn.BCEWithLogitsLoss().to(device)
-    #     else:
-    #         d_loss_fn = Discriminator_Loss(args, cfg ,device).to(device)
-    #     loss_fn = Generator_Loss(args, cfg, device, d_loss_fn).to(device)
-
-    eval_loss_fn = nn.L1Loss().to(device)
 
     if args.resume_iter > 0:
         model.sr_model.load_state_dict(torch.load(os.path.join(cfg.OUTPUT_DIR, 'generator', 'iteration_{}.pth'.format(args.resume_iter))))
@@ -62,15 +47,13 @@ def do_train(args, cfg, model, optimizer, d_optimizer, train_loader, eval_loader
         model.discriminators.load_state_dict(torch.load(os.path.join(cfg.OUTPUT_DIR, 'discriminator', 'iteration_{}.pth'.format(args.resume_iter))))
         d_optimizer.load_state_dict(torch.load(os.path.join(cfg.OUTPUT_DIR, 'd_optimizer', 'iteration_{}.pth'.format(args.resume_iter))))
 
-
-
-    if args.num_gpus > 1:
-        model = torch.nn.DataParallel(model, device_ids=list(range(args.num_gpus)))
+    if cfg.NUM_GPUS > 1:
+        model = torch.nn.DataParallel(model, device_ids=list(range(cfg.NUM_GPUS)))
 
     print('Training Starts')
     model.train()
     for iteration, data in enumerate(train_loader, args.resume_iter+1):
-        if cfg.MODEL.EDGE == True:
+        if cfg.DATASETS.EDGE == True:
             lr_images, hr_images, filename, edge_lr_images, edge_hr_images = data
         else:
             lr_images, hr_images, filename = data
@@ -83,11 +66,12 @@ def do_train(args, cfg, model, optimizer, d_optimizer, train_loader, eval_loader
             d_scheduler.step()
         if type(g_scheduler) is not type(None):
             g_scheduler.step()
+
         #### Train Discriminator ####
-        for _ in range(cfg.SOLVER.DIS_TRAIN_RATIO):
+        for _ in range(cfg.DIS.SOLVER.TRAIN_RATIO):
             d_optimizer.zero_grad()
             
-            if cfg.SOLVER.MIXUP == True:
+            if cfg.DIS.SOLVER.MIXUP == True:
                 loss_list = []
                 mix_images, mixed_predictions, labels = model(lr_images, hr_images, edge_hr_images, mixup=True, device=device)
                 for prediction in mixed_predictions:
@@ -103,18 +87,18 @@ def do_train(args, cfg, model, optimizer, d_optimizer, train_loader, eval_loader
                     real_losses.append(real_loss)
                     fake_losses.append(fake_loss)
 
-                    if cfg.SOLVER.GRADIENT_PENALTY_WEIGHT != 0:
+                    if cfg.DIS.SOLVER.GRADIENT_PENALTY_WEIGHT != 0:
                         gradient_penalty = model(sr_images, hr_images, grad_penalty=True).mean()
                         gradient_penalties.append(gradient_penalty)
 
-                if cfg.SOLVER.GRADIENT_PENALTY_WEIGHT != 0:
+                if cfg.DIS.SOLVER.GRADIENT_PENALTY_WEIGHT != 0:
                     mean_real_loss, mean_fake_loss, mean_gradient_penalty = sum(real_losses) / len(real_losses), sum(fake_losses) / len(fake_losses), sum(gradient_penalties) / len(gradient_penalties)
-                    d_loss = mean_real_loss + mean_fake_loss + cfg.SOLVER.GRADIENT_PENALTY_WEIGHT * mean_gradient_penalty
+                    d_loss = mean_real_loss + mean_fake_loss + cfg.DIS.SOLVER.GRADIENT_PENALTY_WEIGHT * mean_gradient_penalty
                 else:
                     mean_real_loss, mean_fake_loss = sum(real_losses) / len(real_losses), sum(fake_losses) / len(fake_losses)
                     d_loss = mean_real_loss + mean_fake_loss
             # update discriminator parametor
-            if (cfg.DEBUG.GEN == True) and (iteration >= cfg.SOLVER.TRAIN_GAN_START):
+            if (cfg.DEBUG.GEN == True) and (iteration >= cfg.GEN.TRAIN_START):
                 pass
             else:              
                 if args.mixed_precision:
@@ -126,13 +110,6 @@ def do_train(args, cfg, model, optimizer, d_optimizer, train_loader, eval_loader
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
                 d_optimizer.step()
 
-        
-
-        # reduce weight of ReconLoss
-        if cfg.SCHEDULER.RECONLOSS:
-            if iteration % cfg.SCHEDULER.RECONLOSS_STEP == 0:
-                w0 *= cfg.SCHEDULER.RECONLOSS_GAMMA
-
         # for tensorboard
         logging_dict['/train_disc/D_loss'] += d_loss.item()
         logging_dict['/train_disc/real_loss'] += mean_real_loss.item()
@@ -143,26 +120,15 @@ def do_train(args, cfg, model, optimizer, d_optimizer, train_loader, eval_loader
             
 
         #### Train Generator ####
-        for _ in range(cfg.SOLVER.GEN_TRAIN_RATIO):
+        for _ in range(cfg.GEN.SOLVER.TRAIN_RATIO):
 
             # skip until train generator step
-            if iteration <= cfg.SOLVER.TRAIN_GAN_START:
+            if iteration <= cfg.GEN.TRAIN_START:
                 break
             
             optimizer.zero_grad()
             
             sr_images, sr_predictions_g, hr_predictions_g = model(lr_images, hr_images, edge_hr_images)
-            # print(sr_predictions)
-
-            # compute loss of all discriminator
-            # gan_losses = []
-            # for i,(sr_pred_g, hr_pred_g) in enumerate(zip(sr_predictions_g, hr_predictions_g)):
-            #     if i == 0:
-            #         recon_losses, vgg_loss, gan_loss = loss_fn(sr_images, hr_images, sr_pred_g, hr_pred_g)
-            #     else:
-            #         _, _, gan_loss = loss_fn(sr_images, hr_images, sr_pred_g, hr_pred_g, skip_recon=True)
-            #     gan_losses.append(gan_loss)
-
             loss, loss_dict = loss_fn(sr_images, hr_images, sr_predictions_g, hr_predictions_g)
             
             # recon_loss = sum(recon_losses) / len(recon_losses)
@@ -181,7 +147,7 @@ def do_train(args, cfg, model, optimizer, d_optimizer, train_loader, eval_loader
         
         
         # for tensorboard
-        if iteration > cfg.SOLVER.TRAIN_GAN_START:
+        if iteration > cfg.GEN.TRAIN_START:
             logging_dict['/train_gen/loss'] += loss.item()
             # logging_dict['/train_gen/recon_loss'] += recon_loss.item()
             # logging_dict['/train_gen/vgg_loss'] += vgg_loss.item()
@@ -198,18 +164,6 @@ def do_train(args, cfg, model, optimizer, d_optimizer, train_loader, eval_loader
                 
             for i, discriminator_name in enumerate(discriminator_name_list):
                 logging_dict['{}/generate'.format(discriminator_name)] = loss_dict['gan_loss'][i]
-        
-        # For debug
-        # db.do_all('iteration: {}'.format(iteration))
-        # for i, discriminator_name in enumerate(discriminator_name_list):
-        #     db.do_all('discriminator:{}'.format(discriminator_name))
-        #     for j, name in enumerate(filename):
-        #         if iteration <= cfg.SOLVER.TRAIN_GAN_START:
-        #             db.do_all('filename:{} sr_pred:{:.6f} hr_pred:{:.6f}'.format(name,sr_prediction[i][j].item(), hr_prediction[i][j].item()))
-        #         else:
-        #             db.do_all('filename:{} sr_pred:{:.6f} hr_pred:{:.6f} recon_loss:{:.6f}, gen:{:.6f}, vgg:{:.6f}'.format(name,
-        #                 sr_prediction[i][j].item(), hr_prediction[i][j].item(),
-        #                 recon_losses[j].item(),sr_predictions_g[i][j].item(),vgg_loss.item()))
 
         #### save and print log ####
         trained_time += time.time() - end
@@ -235,17 +189,15 @@ def do_train(args, cfg, model, optimizer, d_optimizer, train_loader, eval_loader
 
             eval_save_dir = os.path.join(cfg.OUTPUT_DIR,'eval',str(iteration))
 
-            eval_loss = 0
             for (lr_images, filename) in eval_loader:
                 lr_images = lr_images.to(device)
                 with torch.no_grad():
                     # sr_images = model(lr_images, hr_images)
-                    sr_images = chop_forward(lr_images, model, cfg.MODEL.SCALE_FACTOR, device, nGPUs=args.num_gpus)
+                    sr_images = chop_forward(lr_images, model, cfg.SCALE_FACTOR, device, nGPUs=cfg.NUM_GPUS)
                     # eval_loss += eval_loss_fn(sr_images, hr_images).item()
                 eval_save_path = os.path.join(eval_save_dir, filename[0])
                 save_torch_img(sr_images, eval_save_path, center_crop=True)
 
-            # print('=====> Evaluation Complete: Iter: {:06d}, Reconstruction Loss: {:.6f}'.format(iteration, eval_loss))
             print('=====> Evaluation Complete: Iter: {:06d}'.format(iteration))
             print('=====> Save SR Images to {}'.format(eval_save_dir))
 
@@ -257,7 +209,7 @@ def do_train(args, cfg, model, optimizer, d_optimizer, train_loader, eval_loader
                 # print(lr_images.shape)
                 with torch.no_grad():
                     # sr_images = model(lr_images, hr_images)
-                    sr_images = chop_forward(lr_images, model, cfg.MODEL.SCALE_FACTOR, device, nGPUs=args.num_gpus)
+                    sr_images = chop_forward(lr_images, model, cfg.SCALE_FACTOR, device, nGPUs=cfg.NUM_GPUS)
                     # eval_loss += eval_loss_fn(sr_images, hr_images).item()
                 
                 minitrain_save_path = os.path.join(minitrain_save_dir, filename[0])
@@ -267,11 +219,7 @@ def do_train(args, cfg, model, optimizer, d_optimizer, train_loader, eval_loader
             print('=====> Evaluation Complete: Iter: {:06d}'.format(iteration))
             print('=====> Save SR Images to {}'.format(minitrain_save_dir))
 
-            # if args.tensorboard:
-            #     summary_writer.add_scalar('/eval/loss', eval_loss, global_step=iteration)
-
             model.train()
-                
 
         # checkpoint
         if iteration % args.save_step == 0:
@@ -285,7 +233,7 @@ def do_train(args, cfg, model, optimizer, d_optimizer, train_loader, eval_loader
             check_mkdir(discriminator_path)
             check_mkdir(d_optimizer_path)
 
-            if args.num_gpus > 1:
+            if cfg.NUM_GPUS > 1:
                 torch.save(model.module.sr_model.state_dict(), generator_path)
                 torch.save(model.module.discriminators.state_dict(), discriminator_path)
             else:
@@ -297,47 +245,46 @@ def do_train(args, cfg, model, optimizer, d_optimizer, train_loader, eval_loader
 
             print('=====> Save checkpoint to {}'.format(generator_path))
 
-        # if iteration % cfg.SOLVER.LR_DECAY == 0:
-        #     for param_group in optimizer.param_groups:
-        #         param_group['lr'] /= 10.0
-        #     for param_group in d_optimizer.param_groups:
-        #         param_group['lr'] /= 10.0
-        #     print('Learning rate decay: lr={}'.format(optimizer.param_groups[0]['lr']))
-
 
 def do_pretrain(args, cfg, model, optimizer, train_loader, eval_loader, device, summary_writer, g_scheduler):
     max_iter = len(train_loader)
-    start_training_time = time.time()
     trained_time = 0
     logging_loss = 0
     logging_last_loss = 0
     tic = time.time()
     end = time.time()
 
+    # load model from iter x
     if args.resume_iter > 0:
         model.sr_model.load_state_dict(fix_model_state_dict(torch.load(os.path.join(cfg.OUTPUT_DIR, 'generator', 'iteration_{}.pth'.format(args.resume_iter)))))
         optimizer.load_state_dict(torch.load(os.path.join(cfg.OUTPUT_DIR, 'g_optimizer', 'iteration_{}.pth'.format(args.resume_iter))))
         print('resume from {}'.format(cfg.OUTPUT_DIR))
 
-    if args.num_gpus > 1:
-        model = torch.nn.DataParallel(model, device_ids=list(range(args.num_gpus)))
+    # convert model to multi gpu model
+    if cfg.NUM_GPUS > 1:
+        model = torch.nn.DataParallel(model, device_ids=list(range(cfg.NUM_GPUS)))
 
+    # define loss function
     loss_fn = nn.L1Loss().to(device)
-    # loss_fn = L1_move_Loss(4).to(device)
 
+    # start training
     print('Pre-Training Starts')
     for iteration, data in enumerate(train_loader, args.resume_iter+1):
-        if cfg.MODEL.EDGE == True:
+        # get images
+        if cfg.DATASETS.EDGE == True:
             lr_images, hr_images, filename, edge_lr_images, edge_hr_images = data
         else:
             lr_images, hr_images, filename = data
             edge_lr_images, edge_hr_images = None, None
 
+        # convert images from cpu to device
         lr_images = lr_images.to(device)
         hr_images = hr_images.to(device)
-      
+
+        # reset gradient
         optimizer.zero_grad()
         
+        # compute loss
         loss_list = []
         sr_images_list = model(lr_images)
         for sr_images in sr_images_list:
@@ -345,13 +292,17 @@ def do_pretrain(args, cfg, model, optimizer, train_loader, eval_loader, device, 
             loss_list.append(loss)
         loss = sum(loss_list) / len(loss_list)
 
+        # compute gradient
         if args.mixed_precision:
             with apex.amp.scale_loss(loss, optimizer) as scaled_loss:
                 scaled_loss.backward()
         else:
             loss.backward()
-        optimizer.step()
 
+        # update model
+        optimizer.step()
+        
+        # update lr
         if type(g_scheduler) is not type(None):
             g_scheduler.step()
 
@@ -360,21 +311,26 @@ def do_pretrain(args, cfg, model, optimizer, train_loader, eval_loader, device, 
         end = time.time() 
         logging_loss += loss.item()
         logging_last_loss += loss_list[-1].item()
+
+        # print and save log
         if iteration % args.log_step == 0:
             logging_loss /= args.log_step
             logging_last_loss /= args.log_step
             eta_seconds = int((trained_time / iteration) * (max_iter - iteration))
             print('===> Iter: {:07d}, LR: {:.5f}, Cost: {:.2f}s, Eta: {}, Loss: {:.6f}'.format(iteration, optimizer.param_groups[0]['lr'], time.time() - tic, str(datetime.timedelta(seconds=eta_seconds)), logging_loss))
 
+            # write loss to tensorboard
             if args.tensorboard:
                 summary_writer.add_scalar('/pre_train/loss', logging_loss, global_step=iteration)
                 summary_writer.add_scalar('/pre_train/loss_last_output', logging_last_loss, global_step=iteration)
                 summary_writer.add_scalar('/pre_train/LR', optimizer.param_groups[0]['lr'], global_step=iteration)
             
+            # reset logging loss
             logging_loss = 0
             logging_last_loss = 0
             tic = time.time()
 
+        # save sr image
         if iteration % args.eval_step == 0:
             print('=====> Evaluating...')
             model.eval()
@@ -386,13 +342,12 @@ def do_pretrain(args, cfg, model, optimizer, train_loader, eval_loader, device, 
 
                 with torch.no_grad():
                     sr_images_list = model(lr_images)
-                    # eval_loss += loss_fn(sr_images, hr_images).item()
                 
+                # save sr image
                 for i, sr_images in enumerate(sr_images_list):
                     save_path = os.path.join(eval_save_dir, str(i+1), filename[0])
                     save_torch_img(sr_images, save_path)
 
-            # print('=====> Evaluation Complete: Iter: {:06d}, Reconstruction Loss: {:.6f}'.format(iteration, eval_loss))
             print('=====> Evaluation Complete: Iter: {:06d}'.format(iteration))
             print('=====> Save SR Images to {}'.format(eval_save_dir))
 
@@ -401,7 +356,7 @@ def do_pretrain(args, cfg, model, optimizer, train_loader, eval_loader, device, 
 
             model.train()
 
-        # checkpoint
+        # checkpoint (save model)
         if iteration % args.save_step == 0:
             generator_path = os.path.join(cfg.OUTPUT_DIR, 'generator', 'iteration_{}.pth'.format(iteration))
             g_optimizer_path = os.path.join(cfg.OUTPUT_DIR, 'g_optimizer', 'iteration_{}.pth'.format(iteration))
@@ -409,7 +364,7 @@ def do_pretrain(args, cfg, model, optimizer, train_loader, eval_loader, device, 
             check_mkdir(generator_path)
             check_mkdir(g_optimizer_path)
 
-            if args.num_gpus > 1:
+            if cfg.NUM_GPUS > 1:
                 torch.save(model.module.sr_model.state_dict(), generator_path)
             else:
                 torch.save(model.sr_model.state_dict(), generator_path)

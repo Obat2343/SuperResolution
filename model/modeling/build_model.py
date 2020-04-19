@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch.autograd import grad as torch_grad
 
-from .pbpn import PBPN, PBPN_Re
+from .pbpn import PBPN, PBPN_Custom
 from .dbpn import DBPN, DBPN_LL, DBPN_Custom
 from .discriminator import Discriminator, LargeDiscriminator, UNetDiscriminator, Discriminator128, Discriminator256, Discriminator512, AllUNetDiscriminator, AllUNetDiscriminatorPixelshuffle
 
@@ -76,24 +76,6 @@ class MODEL(nn.Module):
             # predictions = self.discriminator(torch.cat((sr_images, hr_images), 0))
             return sr_images, fake_predictions, real_predictions
             # return sr_images, predictions
-    
-    # def calc_gradient_penalty(self, sr_images, hr_images, device):
-    #     #print real_data.size()
-    #     BATCH_SIZE = hr_images.size(0)
-    #     alpha = torch.rand(BATCH_SIZE, 1)
-    #     alpha = alpha.expand(hr_images.size())
-    #     alpha = alpha.to(device)
-
-    #     interpolates = alpha * hr_images + ((1 - alpha) * sr_images)
-    #     interpolates = interpolates.to(device)
-    #     disc_interpolates = netD(interpolates)
-
-    #     gradients = autograd.grad(outputs=disc_interpolates, inputs=interpolates,
-    #                             grad_outputs=torch.ones(disc_interpolates.size()).to(device),
-    #                             create_graph=True, retain_graph=True, only_inputs=True)[0]
-
-    #     gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
-    #     return gradient_penalty
 
     def calc_gradient_penalty(self, sr_images, hr_images):
         device = hr_images.device
@@ -126,26 +108,26 @@ class MODEL(nn.Module):
 
 
 def build_model(cfg, pretrain=False):
-    if cfg.MODEL.BASE_MODEL_NAME == 'pbpn':
+    if cfg.GEN.NAME == 'pbpn':
         generator = PBPN(cfg)
-    elif cfg.MODEL.BASE_MODEL_NAME == 'pbpn-re':
-        generator = PBPN_Re(cfg)
-    elif cfg.MODEL.BASE_MODEL_NAME == 'dbpn-custom':
+    elif cfg.GEN.NAME == 'pbpn-custom':
+        generator = PBPN_Custom(cfg)
+    elif cfg.GEN.NAME == 'dbpn-custom':
         generator = DBPN_Custom(cfg)
-    elif cfg.MODEL.BASE_MODEL_NAME == 'dbpn-ll':
+    elif cfg.GEN.NAME == 'dbpn-ll':
         generator = DBPN_LL(cfg)
-    elif cfg.MODEL.BASE_MODEL_NAME == 'dbpn':
+    elif cfg.GEN.NAME == 'dbpn':
         generator = DBPN(cfg)
 
     if pretrain:
-        print('generator: {}'.format(cfg.MODEL.BASE_MODEL_NAME))
+        print('generator: {}'.format(cfg.GEN.NAME))
         return MODEL(cfg, generator)
     else:
         discriminator_name_list = list(cfg.SOLVER.DISCRIMINATOR_TYPE)
         discriminator_name_list.sort()
         discriminator_list = []
         print(discriminator_name_list)
-        if cfg.MODEL.EDGE == True:
+        if cfg.DATASETS.EDGE == True:
             num_channels = 4
         else:
             num_channels = 3
@@ -167,7 +149,7 @@ def build_model(cfg, pretrain=False):
         if 'AllUNetPix' in discriminator_name_list:
             discriminator_list.append(AllUNetDiscriminatorPixelshuffle(cfg, num_channels=num_channels))
 
-        print('generator: {}'.format(cfg.MODEL.BASE_MODEL_NAME))
+        print('generator: {}'.format(cfg.BASE_MODEL_NAME))
         print('discriminator list')
         print(discriminator_list)
 

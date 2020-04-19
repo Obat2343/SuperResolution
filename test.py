@@ -17,7 +17,7 @@ from model.utils.misc import chop_forward_2 as chop_forward
 def test(args, cfg):
     device = torch.device(cfg.MODEL.DEVICE)
 
-    if cfg.MODEL.BICUBIC_RESIDUAL:
+    if cfg.MODEL.GEN.OPTOIN.FINAL_RESIDUAL == 'none':
         model = PBPN_Re(cfg).to(device)
     else:
         model = PBPN(cfg).to(device)
@@ -57,9 +57,9 @@ def test(args, cfg):
         tic = time.time()
         with torch.no_grad():
             if args.small:
-                sr_images = chop_forward(lr_images, model, cfg.MODEL.SCALE_FACTOR, device, shave=8, slice_size=16, nGPUs=args.num_gpus, ensemble=args.ensemble)
+                sr_images = chop_forward(lr_images, model, cfg.MODEL.GEN.SCALE_FACTOR, device, shave=8, slice_size=16, nGPUs=args.num_gpus, ensemble=args.ensemble)
             else:
-                sr_images = chop_forward(lr_images, model, cfg.MODEL.SCALE_FACTOR, device, nGPUs=args.num_gpus, ensemble=args.ensemble)
+                sr_images = chop_forward(lr_images, model, cfg.MODEL.GEN.SCALE_FACTOR, device, nGPUs=args.num_gpus, ensemble=args.ensemble)
         toc = time.time()
         total_inference_time += toc - tic
         save_path = os.path.join(save_dir, filename[0])

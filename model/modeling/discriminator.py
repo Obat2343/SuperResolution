@@ -1,6 +1,7 @@
+import torch
 import torch.nn as nn
 import numpy as np
-from .base_networks import *
+from .base_networks import ConvBlock, DenseBlock, Flatten, DeconvBlock, PSBlock
 from torchvision.transforms import RandomCrop
 
 
@@ -8,10 +9,10 @@ class Discriminator(nn.Module):
     # receptive field : 61 * 61 px
     def __init__(self, cfg, num_channels=3, base_filter=64):
         super(Discriminator, self).__init__()
-        self.image_size = cfg.INPUT.PATCH_SIZE * cfg.MODEL.SCALE_FACTOR
+        self.image_size = cfg.BASIC.PATCH_SIZE * cfg.BASIC.SCALE_FACTOR
         
-        activation = cfg.MODEL.DIS_ACTIVATION
-        norm = cfg.MODEL.DIS_NORM
+        activation = cfg.DIS.ACTIVATION
+        norm = cfg.DIS.NORM
         if norm == 'none':
             norm = None
         
@@ -54,10 +55,10 @@ class LargeDiscriminator(nn.Module):
     # receptive field : 253 * 253 px
     def __init__(self, cfg, num_channels=3, base_filter=64):
         super(LargeDiscriminator, self).__init__()
-        self.image_size = cfg.INPUT.PATCH_SIZE * cfg.MODEL.SCALE_FACTOR
+        self.image_size = cfg.BASIC.PATCH_SIZE * cfg.BASIC.SCALE_FACTOR
         
-        activation = cfg.MODEL.DIS_ACTIVATION
-        norm = cfg.MODEL.DIS_NORM
+        activation = cfg.DIS.ACTIVATION
+        norm = cfg.DIS.NORM
         if norm == 'none':
             norm = None
 
@@ -103,10 +104,10 @@ class Discriminator128(nn.Module):
     # receptive field : 128 * 128 px
     def __init__(self, cfg, num_channels=3, base_filter=64):
         super(Discriminator128, self).__init__()
-        self.image_size = cfg.INPUT.PATCH_SIZE * cfg.MODEL.SCALE_FACTOR
+        self.image_size = cfg.BASIC.PATCH_SIZE * cfg.BASIC.SCALE_FACTOR
         np.random.seed(seed=cfg.SEED)
-        activation = cfg.MODEL.DIS_ACTIVATION
-        norm = cfg.MODEL.DIS_NORM
+        activation = cfg.DIS.ACTIVATION
+        norm = cfg.DIS.NORM
         if norm == 'none':
             norm = None
 
@@ -163,10 +164,10 @@ class Discriminator256(nn.Module):
     # receptive field : 256 * 256 px
     def __init__(self, cfg, num_channels=3, base_filter=64):
         super(Discriminator256, self).__init__()
-        self.image_size = cfg.INPUT.PATCH_SIZE * cfg.MODEL.SCALE_FACTOR
+        self.image_size = cfg.BASIC.PATCH_SIZE * cfg.BASIC.SCALE_FACTOR
         np.random.seed(seed=cfg.SEED)
-        activation = cfg.MODEL.DIS_ACTIVATION
-        norm = cfg.MODEL.DIS_NORM
+        activation = cfg.DIS.ACTIVATION
+        norm = cfg.DIS.NORM
         if norm == 'none':
             norm = None
 
@@ -224,10 +225,10 @@ class Discriminator512(nn.Module):
     # receptive field : 512 * 512 px
     def __init__(self, cfg, num_channels=3, base_filter=64):
         super(Discriminator512, self).__init__()
-        self.image_size = cfg.INPUT.PATCH_SIZE * cfg.MODEL.SCALE_FACTOR
+        self.image_size = cfg.BASIC.PATCH_SIZE * cfg.BASIC.SCALE_FACTOR
         
-        activation = cfg.MODEL.DIS_ACTIVATION
-        norm = cfg.MODEL.DIS_NORM
+        activation = cfg.DIS.ACTIVATION
+        norm = cfg.DIS.NORM
         if norm == 'none':
             norm = None
 
@@ -279,8 +280,8 @@ class UNetDiscriminator(nn.Module):
     def __init__(self, cfg, num_channels=3, base_filter=64):
         super(UNetDiscriminator, self).__init__()
 
-        activation = cfg.MODEL.DIS_ACTIVATION
-        norm = cfg.MODEL.DIS_NORM
+        activation = cfg.DIS.ACTIVATION
+        norm = cfg.DIS.NORM
         if norm == 'none':
             norm = None
 
@@ -315,7 +316,7 @@ class UNetDiscriminator(nn.Module):
         ])
 
 
-        if cfg.SOLVER.GANLOSS_FN == 'MSE':
+        if cfg.LOSS.GANLOSS_FN == 'MSE':
             self.out_conv = nn.ModuleList([
                 ConvBlock(base_filter*8, 1, 1, 1, 0, activation='sigmoid', norm=None),
                 ConvBlock(base_filter*1, 1, 1, 1, 0, activation='sigmoid', norm=None),
@@ -352,8 +353,8 @@ class AllUNetDiscriminator(nn.Module):
     def __init__(self, cfg, num_channels=3, base_filter=64):
         super(AllUNetDiscriminator, self).__init__()
 
-        activation = cfg.MODEL.DIS_ACTIVATION
-        norm = cfg.MODEL.DIS_NORM
+        activation = cfg.DIS.ACTIVATION
+        norm = cfg.DIS.NORM
         if norm == 'none':
             norm = None
 
@@ -424,8 +425,8 @@ class AllUNetDiscriminatorPixelshuffle(nn.Module):
     def __init__(self, cfg, num_channels=3, base_filter=64):
         super(AllUNetDiscriminatorPixelshuffle, self).__init__()
 
-        activation = cfg.MODEL.DIS_ACTIVATION
-        norm = cfg.MODEL.DIS_NORM
+        activation = cfg.DIS.ACTIVATION
+        norm = cfg.DIS.NORM
         if norm == 'none':
             norm = None
 

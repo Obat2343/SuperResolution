@@ -6,8 +6,8 @@ class TrainAugmentation:
         if cfg.SOLVER.BLUR_AUG:
             self.transform = Compose([
                 ConvertFromInts(),
-                RandomCrop(cfg.INPUT.PATCH_SIZE*cfg.MODEL.SCALE_FACTOR,16,seed=cfg.SEED),
-                Resize(cfg.MODEL.SCALE_FACTOR),
+                RandomCrop(cfg.PATCH_SIZE*cfg.SCALE_FACTOR,16,seed=cfg.SEED),
+                Resize(cfg.SCALE_FACTOR),
                 RandomFlip(seed=cfg.SEED),
                 RandomRotate(seed=cfg.SEED),
                 GaussianBlur(kernel_range=(0, 5)),
@@ -18,8 +18,8 @@ class TrainAugmentation:
         else:
             self.transform = Compose([
                 ConvertFromInts(),
-                RandomCrop(cfg.INPUT.PATCH_SIZE*cfg.MODEL.SCALE_FACTOR,16,seed=cfg.SEED),
-                Resize(cfg.MODEL.SCALE_FACTOR),
+                RandomCrop(cfg.PATCH_SIZE*cfg.SCALE_FACTOR,16,seed=cfg.SEED),
+                Resize(cfg.SCALE_FACTOR),
                 RandomFlip(seed=cfg.SEED),
                 RandomRotate(seed=cfg.SEED),
                 Save_image(cfg.OUTPUT_DIR,skip=cfg.DEBUG.SKIP_SAVE_IMAGE),
@@ -40,7 +40,7 @@ class MiniTrainAugmentation:
         self.transform = Compose([
             ConvertFromInts(),
             CenterCrop(crop_size=512),
-            Resize(cfg.MODEL.SCALE_FACTOR),
+            Resize(cfg.SCALE_FACTOR),
             Normalize(),
             ToTensor(),
         ])
@@ -58,8 +58,8 @@ class EvaluateAugmentation:
         self.transform = Compose([
             ConvertFromInts(),
             CenterCrop(),
-            # ShapingCrop(cfg.MODEL.SCALE_FACTOR),
-            # Resize(cfg.MODEL.SCALE_FACTOR, eval=True),
+            # ShapingCrop(cfg.SCALE_FACTOR),
+            # Resize(cfg.SCALE_FACTOR, eval=True),
             Normalize(),
             ToTensor(),
         ])
@@ -72,8 +72,8 @@ class EvaluateAugmentationFull:
     def __init__(self, cfg):
         self.transform = Compose([
             ConvertFromInts(),
-            # ShapingCrop(cfg.MODEL.SCALE_FACTOR),
-            # Resize(cfg.MODEL.SCALE_FACTOR, eval=True),
+            # ShapingCrop(cfg.SCALE_FACTOR),
+            # Resize(cfg.SCALE_FACTOR, eval=True),
             Normalize(),
             ToTensor(),
         ])
@@ -86,9 +86,9 @@ class VisualizeAugmentation:
     def __init__(self, cfg):
         self.transform = Compose([
             ConvertFromInts(),
-            # ShapingCrop(cfg.MODEL.SCALE_FACTOR),
+            # ShapingCrop(cfg.SCALE_FACTOR),
             CenterCrop(crop_size=512),
-            Resize(cfg.MODEL.SCALE_FACTOR, eval=True),
+            Resize(cfg.SCALE_FACTOR, eval=True),
             Normalize(),
             ToTensor(),
         ])
@@ -103,7 +103,7 @@ class VisualizeAugmentationFull:
             ConvertFromInts(),
             ShapingCrop(16),
             # CenterCrop(crop_size=512),
-            Resize(cfg.MODEL.SCALE_FACTOR, eval=True),
+            Resize(cfg.SCALE_FACTOR, eval=True),
             Normalize(),
             ToTensor(),
         ])

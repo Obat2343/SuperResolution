@@ -2,4 +2,5 @@ Dataset
 configs
 env
 output
+weights
 .netrc

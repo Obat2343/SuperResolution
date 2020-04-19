@@ -28,9 +28,9 @@ from model.engine.trainer import do_train, do_pretrain
 
 
 def train(args, cfg):
-    device = torch.device(cfg.MODEL.DEVICE)
-    
+    # build model
     print('Building model...')
+    device = torch.device(cfg.DEVICE)
     model = build_model(cfg, args.pretrain).to(device)
 
     print('--------------------Generator architecture--------------------')
@@ -38,61 +38,10 @@ def train(args, cfg):
     print('------------------Discriminator architecture------------------')
     print(model.discriminators)
 
-    print('Loading datasets...')
-    train_transform = TrainAugmentation(cfg)
-    train_dataset = build_dataset(dataset_list=cfg.DATASETS.TRAIN, transform=train_transform, edge=cfg.MODEL.EDGE)
-    sampler = torch.utils.data.RandomSampler(train_dataset)
-    batch_sampler = torch.utils.data.sampler.BatchSampler(sampler=sampler, batch_size=cfg.SOLVER.BATCH_SIZE, drop_last=True)
-    batch_sampler = samplers.IterationBasedBatchSampler(batch_sampler, num_iterations=cfg.SOLVER.MAX_ITER)
-    train_loader = DataLoader(train_dataset, num_workers=args.num_workers, batch_sampler=batch_sampler, pin_memory=True)
-
-    eval_transform =  EvaluateAugmentation(cfg)
-    eval_dataset = build_dataset(dataset_list=cfg.DATASETS.EVAL, transform=eval_transform, edge=cfg.MODEL.EDGE)
-    eval_loader = DataLoader(eval_dataset, num_workers=args.num_workers)
-
-    minitrain_transform = MiniTrainAugmentation(cfg)
-    minitrain_dataset = build_dataset(dataset_list=cfg.DATASETS.VIS, transform=minitrain_transform, edge=False)
-    minitrain_loader = DataLoader(minitrain_dataset, num_workers=args.num_workers)
-
-    if cfg.SOLVER.GENERATOR_OPTIM == 'adam':
-        optimizer = torch.optim.Adam(model.sr_model.parameters(), lr=cfg.SOLVER.GENERATOR_LR, betas=(0.5, 0.9))
-    elif cfg.SOLVER.GENERATOR_OPTIM == 'sgd':
-        optimizer = torch.optim.SGD(model.sr_model.parameters(), lr=cfg.SOLVER.GENERATOR_LR, momentum=0.6)
-    else:
-        raise ValueError('optimizer error: choose adam or sgd')
-
-    if not args.pretrain:
-        if cfg.SOLVER.DISCRIMINATOR_OPTIM == 'adam':
-            d_optimizer = torch.optim.Adam(model.discriminators.parameters(), lr=cfg.SOLVER.DISCRIMINATOR_LR, betas=(0.5, 0.9))
-        elif cfg.SOLVER.DISCRIMINATOR_OPTIM == 'sgd':
-            d_optimizer = torch.optim.SGD(model.discriminators.parameters(), lr=cfg.SOLVER.DISCRIMINATOR_LR, momentum=0.6)
-        else:
-            raise ValueError('d_optimizer error: choose adam or sgd')
-
     if args.sync_batchnorm:
         model = convert_model(model).to(device)
-  
-    if args.mixed_precision:
-        model.sr_model, optimizer = apex.amp.initialize(model.sr_model, optimizer, opt_level='O1')
-        if not args.pretrain:
-            model.discriminators, d_optimizer = apex.amp.initialize(model.discriminators, d_optimizer, opt_level='O1')
 
-    if args.tensorboard:
-        summary_writer = tensorboardX.SummaryWriter(log_dir=cfg.OUTPUT_DIR)
-    else:
-        summary_writer = None
-    
-    if cfg.SCHEDULER.GENERATOR:
-        g_scheduler = StepLR(optimizer, step_size=cfg.SCHEDULER.GENERATOR_STEP * cfg.SOLVER.GEN_TRAIN_RATIO, gamma=cfg.SCHEDULER.GENERATOR_GAMMA) # step size = gen_step * gen_dis ratio
-    else:
-        g_scheduler = None
-    
-    if cfg.SCHEDULER.DISCRIMINATOR:
-        d_scheduler = StepLR(d_optimizer, step_size=cfg.SCHEDULER.DISCRIMINATOR_STEP, gamma=cfg.SCHEDULER.DISCRIMINATOR_GAMMA)
-    else:
-        d_scheduler = None
-
-    # print(model.sr_model)
+    # load pretrain model
     if not args.pretrain:
         print('pretrain model was loaded from {}'.format(cfg.PRETRAIN_MODEL))
         model.sr_model.load_state_dict(fix_model_state_dict(torch.load(cfg.PRETRAIN_MODEL, map_location=lambda storage, loc:storage)))
@@ -100,7 +49,65 @@ def train(args, cfg):
             print('pretrain discriminator model was loaded from {}'.format(cfg.PRETRAIN_D_MODEL))
             model.discriminators.load_state_dict(fix_model_state_dict(torch.load(cfg.PRETRAIN_D_MODEL, map_location=lambda storage, loc:storage)))
 
-    ### Start Training
+    # build train dataset
+    print('Loading datasets...')
+    train_transform = TrainAugmentation(cfg)
+    train_dataset = build_dataset(dataset_list=cfg.DATASETS.TRAIN, transform=train_transform, edge=cfg.DATASETS.EDGE)
+    sampler = torch.utils.data.RandomSampler(train_dataset)
+    batch_sampler = torch.utils.data.sampler.BatchSampler(sampler=sampler, batch_size=cfg.BATCH_SIZE, drop_last=True)
+    batch_sampler = samplers.IterationBasedBatchSampler(batch_sampler, num_iterations=cfg.MAX_ITER)
+    train_loader = DataLoader(train_dataset, num_workers=cfg.NUM_WORKERS, batch_sampler=batch_sampler, pin_memory=True)
+
+    # build evaluation dataset
+    eval_transform =  EvaluateAugmentation(cfg)
+    eval_dataset = build_dataset(dataset_list=cfg.DATASETS.EVAL, transform=eval_transform, edge=cfg.DATASETS.EDGE)
+    eval_loader = DataLoader(eval_dataset, num_workers=cfg.NUM_WORKERS)
+
+    # build minitrain dataset
+    minitrain_transform = MiniTrainAugmentation(cfg)
+    minitrain_dataset = build_dataset(dataset_list=cfg.DATASETS.VIS, transform=minitrain_transform, edge=False)
+    minitrain_loader = DataLoader(minitrain_dataset, num_workers=cfg.NUM_WORKERS)
+
+    # build optimizer and scheduler for generator(sr_model)
+    if cfg.GEN.SOLVER.METHOD == 'adam':
+        optimizer = torch.optim.Adam(model.sr_model.parameters(), lr=cfg.GEN.SOLVER.LR, betas=(cfg.GEN.SOLVER.BETA1, cfg.GEN.SOLVER.BETA2))
+    elif cfg.GEN.SOLVER.METHOD == 'sgd':
+        optimizer = torch.optim.SGD(model.sr_model.parameters(), lr=cfg.GEN.SOLVER.LR, momentum=0.6)
+    else:
+        raise ValueError('optimizer error: choose adam or sgd')
+    
+    if cfg.GEN.SCHEDULER.STEP > 0:
+        g_scheduler = StepLR(optimizer, step_size=cfg.GEN.SCHEDULER.STEP * cfg.GEN.SOLVER.TRAIN_RATIO, gamma=cfg.GEN.SCHEDULER.GAMMA) # step size = gen_step * gen_dis ratio
+    else:
+        g_scheduler = None
+
+    # build optimizer and scheduler for discriminator
+    if not args.pretrain:
+        if cfg.DIS.SOLVER.METHOD == 'adam':
+            d_optimizer = torch.optim.Adam(model.discriminators.parameters(), lr=cfg.DIS.SOLVER.LR, betas=(cfg.DIS.SOLVER.BETA1, cfg.DIS.SOLVER.BETA2))
+        elif cfg.DIS.SOLVER.METHOD == 'sgd':
+            d_optimizer = torch.optim.SGD(model.discriminators.parameters(), lr=cfg.DIS.SOLVER.LR, momentum=0.6)
+        else:
+            raise ValueError('d_optimizer error: choose adam or sgd')
+    
+    if cfg.DIS.SCHEDULER.STEP > 0:
+        d_scheduler = StepLR(d_optimizer, step_size=cfg.DIS.SCHEDULER.STEP, gamma=cfg.DIS.SCHEDULER.GAMMA)
+    else:
+        d_scheduler = None
+
+    # convert model and optimizer to mixed precision model
+    if args.mixed_precision:
+        model.sr_model, optimizer = apex.amp.initialize(model.sr_model, optimizer, opt_level='O1')
+        if not args.pretrain:
+            model.discriminators, d_optimizer = apex.amp.initialize(model.discriminators, d_optimizer, opt_level='O1')
+
+    # set tensorboard
+    if args.tensorboard:
+        summary_writer = tensorboardX.SummaryWriter(log_dir=cfg.OUTPUT_DIR)
+    else:
+        summary_writer = None
+
+    ### Start Training ###
     if args.pretrain:
         do_pretrain(args, cfg, model, optimizer, train_loader, eval_loader, device, summary_writer, g_scheduler)
         sys.exit()
@@ -111,8 +118,7 @@ def main():
     parser = argparse.ArgumentParser(description='Perceptual Extreme Super-Resolution for NTIRE2020')
     parser.add_argument('-c','--config_file', type=str, default='', metavar='FILE', help='path to config file')
     parser.add_argument('-m','--mixed_precision', type=str2bool, default=False, help='')
-    parser.add_argument('-t','--tensorboard', type=str2bool, default=True)
-    parser.add_argument('-ng','--num_gpus', type=int, default=2, help='')
+    parser.add_argument('-t','--tensorboard', type=str2bool, default=False)
     parser.add_argument('-nw','--num_workers', type=int, default=24, help='')
     parser.add_argument('-ls','--log_step', type=int, default=50, help='')
     parser.add_argument('-ss','--save_step', type=int, default=1000, help='')

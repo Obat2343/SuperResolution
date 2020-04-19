@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 
-from .base_networks import *
+from .base_networks import ConvBlock, UpBlock, D_UpBlock, DownBlock, D_DownBlock
+from .dbpn_module import UpBlock_DBPN, D_UpBlock_DBPN, DownBlock_DBPN, D_DownBlock_DBPN
 
 class DBPN(nn.Module):
     def __init__(self, cfg):
