@@ -3,7 +3,7 @@ from .transforms import *
 
 class TrainAugmentation:
     def __init__(self, cfg):
-        if cfg.SOLVER.BLUR_AUG:
+        if cfg.DATASETS.BLUR_AUG:
             self.transform = Compose([
                 ConvertFromInts(),
                 RandomCrop(cfg.PATCH_SIZE*cfg.SCALE_FACTOR,16,seed=cfg.SEED),
@@ -11,7 +11,6 @@ class TrainAugmentation:
                 RandomFlip(seed=cfg.SEED),
                 RandomRotate(seed=cfg.SEED),
                 GaussianBlur(kernel_range=(0, 5)),
-                Save_image(cfg.OUTPUT_DIR,skip=cfg.DEBUG.SKIP_SAVE_IMAGE),
                 Normalize(),
                 ToTensor(),
             ])
@@ -22,7 +21,6 @@ class TrainAugmentation:
                 Resize(cfg.SCALE_FACTOR),
                 RandomFlip(seed=cfg.SEED),
                 RandomRotate(seed=cfg.SEED),
-                Save_image(cfg.OUTPUT_DIR,skip=cfg.DEBUG.SKIP_SAVE_IMAGE),
                 Normalize(),
                 ToTensor(),
             ])

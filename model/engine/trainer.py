@@ -38,7 +38,7 @@ def do_train(args, cfg, model, optimizer, d_optimizer, train_loader, eval_loader
     tic = time.time()
     end = time.time()
 
-    loss_fn = Generator_Loss(args, cfg).to(device)
+    g_loss_fn = Generator_Loss(args, cfg).to(device)
     d_loss_fn = Discriminator_Loss(args, cfg).to(device)
 
     if args.resume_iter > 0:
@@ -71,32 +71,26 @@ def do_train(args, cfg, model, optimizer, d_optimizer, train_loader, eval_loader
         for _ in range(cfg.DIS.SOLVER.TRAIN_RATIO):
             d_optimizer.zero_grad()
             
-            if cfg.DIS.SOLVER.MIXUP == True:
-                loss_list = []
-                mix_images, mixed_predictions, labels = model(lr_images, hr_images, edge_hr_images, mixup=True, device=device)
-                for prediction in mixed_predictions:
-                    loss_list.append(d_loss_fn(prediction, labels))
-                real_loss, fake_loss = torch.tensor([0]), torch.tensor([0])
-            else:
-                real_losses, fake_losses, gradient_penalties = [], [], []
-                sr_images, sr_prediction, hr_prediction = model(lr_images, hr_images, edge_hr_images)
-                # print('prediction sr max:{} min:{}'.format(torch.min(sr_prediction),torch.max(sr_prediction)))
-                # average of all discriminator
-                for i in range(len(sr_prediction)):
-                    real_loss, fake_loss = d_loss_fn(sr_prediction[i], hr_prediction[i])
-                    real_losses.append(real_loss)
-                    fake_losses.append(fake_loss)
+            real_losses, fake_losses, gradient_penalties = [], [], []
+            sr_images, sr_prediction, hr_prediction = model(lr_images, hr_images, edge_hr_images)
+            # print('prediction sr max:{} min:{}'.format(torch.min(sr_prediction),torch.max(sr_prediction)))
 
-                    if cfg.DIS.SOLVER.GRADIENT_PENALTY_WEIGHT != 0:
-                        gradient_penalty = model(sr_images, hr_images, grad_penalty=True).mean()
-                        gradient_penalties.append(gradient_penalty)
+            for i in range(len(sr_prediction)):
+                real_loss, fake_loss = d_loss_fn(sr_prediction[i], hr_prediction[i])
+                real_losses.append(real_loss)
+                fake_losses.append(fake_loss)
 
                 if cfg.DIS.SOLVER.GRADIENT_PENALTY_WEIGHT != 0:
-                    mean_real_loss, mean_fake_loss, mean_gradient_penalty = sum(real_losses) / len(real_losses), sum(fake_losses) / len(fake_losses), sum(gradient_penalties) / len(gradient_penalties)
-                    d_loss = mean_real_loss + mean_fake_loss + cfg.DIS.SOLVER.GRADIENT_PENALTY_WEIGHT * mean_gradient_penalty
-                else:
-                    mean_real_loss, mean_fake_loss = sum(real_losses) / len(real_losses), sum(fake_losses) / len(fake_losses)
-                    d_loss = mean_real_loss + mean_fake_loss
+                    gradient_penalty = model(sr_images, hr_images, grad_penalty=True).mean()
+                    gradient_penalties.append(gradient_penalty)
+
+            if cfg.DIS.SOLVER.GRADIENT_PENALTY_WEIGHT != 0:
+                mean_real_loss, mean_fake_loss, mean_gradient_penalty = sum(real_losses) / len(real_losses), sum(fake_losses) / len(fake_losses), sum(gradient_penalties) / len(gradient_penalties)
+                d_loss = mean_real_loss + mean_fake_loss + cfg.DIS.SOLVER.GRADIENT_PENALTY_WEIGHT * mean_gradient_penalty
+            else:
+                mean_real_loss, mean_fake_loss = sum(real_losses) / len(real_losses), sum(fake_losses) / len(fake_losses)
+                d_loss = mean_real_loss + mean_fake_loss
+
             # update discriminator parametor
             if (cfg.DEBUG.GEN == True) and (iteration >= cfg.GEN.TRAIN_START):
                 pass
@@ -129,29 +123,22 @@ def do_train(args, cfg, model, optimizer, d_optimizer, train_loader, eval_loader
             optimizer.zero_grad()
             
             sr_images, sr_predictions_g, hr_predictions_g = model(lr_images, hr_images, edge_hr_images)
-            loss, loss_dict = loss_fn(sr_images, hr_images, sr_predictions_g, hr_predictions_g)
+            loss, loss_dict = g_loss_fn(sr_images, hr_images, sr_predictions_g, hr_predictions_g)
             
-            # recon_loss = sum(recon_losses) / len(recon_losses)
-            # gan_loss = sum(gan_losses) / len(gan_losses)
-            # loss = (w0*recon_loss) + (w1*vgg_loss) + (w2*gan_loss)
-
             # update parametor
             if args.mixed_precision:
                 with apex.amp.scale_loss(loss, optimizer) as scaled_loss:
                     scaled_loss.backward()
             else:
                 loss.backward()
+
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
             optimizer.step()
 
-        
-        
         # for tensorboard
         if iteration > cfg.GEN.TRAIN_START:
             logging_dict['/train_gen/loss'] += loss.item()
-            # logging_dict['/train_gen/recon_loss'] += recon_loss.item()
-            # logging_dict['/train_gen/vgg_loss'] += vgg_loss.item()
-            # logging_dict['/train_gen/gan_loss'] += gan_loss.item()
+            
             if 'recon_loss' in loss_dict.keys():
                 logging_dict['/train_gen/recon_loss'] += loss_dict['recon_loss']
             if 'style_loss' in loss_dict.keys():
@@ -192,9 +179,7 @@ def do_train(args, cfg, model, optimizer, d_optimizer, train_loader, eval_loader
             for (lr_images, filename) in eval_loader:
                 lr_images = lr_images.to(device)
                 with torch.no_grad():
-                    # sr_images = model(lr_images, hr_images)
                     sr_images = chop_forward(lr_images, model, cfg.SCALE_FACTOR, device, nGPUs=cfg.NUM_GPUS)
-                    # eval_loss += eval_loss_fn(sr_images, hr_images).item()
                 eval_save_path = os.path.join(eval_save_dir, filename[0])
                 save_torch_img(sr_images, eval_save_path, center_crop=True)
 
@@ -206,16 +191,12 @@ def do_train(args, cfg, model, optimizer, d_optimizer, train_loader, eval_loader
             for data in minitrain_loader:
                 lr_images, hr_images, filename = data
                 lr_images = lr_images.to(device)
-                # print(lr_images.shape)
                 with torch.no_grad():
-                    # sr_images = model(lr_images, hr_images)
                     sr_images = chop_forward(lr_images, model, cfg.SCALE_FACTOR, device, nGPUs=cfg.NUM_GPUS)
-                    # eval_loss += eval_loss_fn(sr_images, hr_images).item()
                 
                 minitrain_save_path = os.path.join(minitrain_save_dir, filename[0])
                 save_torch_img(sr_images, minitrain_save_path, center_crop=True)
 
-            # print('=====> Evaluation Complete: Iter: {:06d}, Reconstruction Loss: {:.6f}'.format(iteration, eval_loss))
             print('=====> Evaluation Complete: Iter: {:06d}'.format(iteration))
             print('=====> Save SR Images to {}'.format(minitrain_save_dir))
 
@@ -336,7 +317,6 @@ def do_pretrain(args, cfg, model, optimizer, train_loader, eval_loader, device, 
             model.eval()
             eval_save_dir = os.path.join(cfg.OUTPUT_DIR,'eval',str(iteration))
 
-            eval_loss = 0
             for (lr_images, filename) in eval_loader:
                 lr_images = lr_images.to(device)
 
@@ -350,9 +330,6 @@ def do_pretrain(args, cfg, model, optimizer, train_loader, eval_loader, device, 
 
             print('=====> Evaluation Complete: Iter: {:06d}'.format(iteration))
             print('=====> Save SR Images to {}'.format(eval_save_dir))
-
-            if args.tensorboard:
-                summary_writer.add_scalar('/eval/loss', eval_loss, global_step=iteration)
 
             model.train()
 

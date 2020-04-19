@@ -90,10 +90,10 @@ def train(args, cfg):
         else:
             raise ValueError('d_optimizer error: choose adam or sgd')
     
-    if cfg.DIS.SCHEDULER.STEP > 0:
-        d_scheduler = StepLR(d_optimizer, step_size=cfg.DIS.SCHEDULER.STEP, gamma=cfg.DIS.SCHEDULER.GAMMA)
-    else:
-        d_scheduler = None
+        if cfg.DIS.SCHEDULER.STEP > 0:
+            d_scheduler = StepLR(d_optimizer, step_size=cfg.DIS.SCHEDULER.STEP, gamma=cfg.DIS.SCHEDULER.GAMMA)
+        else:
+            d_scheduler = None
 
     # convert model and optimizer to mixed precision model
     if args.mixed_precision:
@@ -118,7 +118,7 @@ def main():
     parser = argparse.ArgumentParser(description='Perceptual Extreme Super-Resolution for NTIRE2020')
     parser.add_argument('-c','--config_file', type=str, default='', metavar='FILE', help='path to config file')
     parser.add_argument('-m','--mixed_precision', type=str2bool, default=False, help='')
-    parser.add_argument('-t','--tensorboard', type=str2bool, default=False)
+    parser.add_argument('-t','--tensorboard', type=str2bool, default=True)
     parser.add_argument('-nw','--num_workers', type=int, default=24, help='')
     parser.add_argument('-ls','--log_step', type=int, default=50, help='')
     parser.add_argument('-ss','--save_step', type=int, default=1000, help='')

@@ -39,7 +39,7 @@ _C.GEN.UPSAMPLE = 'pixelshuffle' # pixelshuffle, deconv, rconv
 
 # generator structure option
 _C.GEN.SCALE_FACTOR = 4
-_C.GEN.NUM_UPSCALE = 2
+_C.GEN.NUM_UPSCALE = 2      # size = lr_size * (scale_factor ^ num_upscale)
 _C.GEN.NUM_STAGES = 10
 _C.GEN.FEAT = 256
 _C.GEN.BASE_FILTER = 64
@@ -105,6 +105,7 @@ _C.DIS.SCHEDULER.GAMMA = 0.1
 
 _C.LOSS = CN()
 
+# weight of loss
 _C.LOSS.RECONLOSS_WEIGHT = 1.0
 _C.LOSS.VGGLOSS_WEIGHT = 1.0
 _C.LOSS.GANLOSS_WEIGHT = 0.001
@@ -112,6 +113,7 @@ _C.LOSS.STYLELOSS_WEIGHT = 0.001
 _C.LOSS.VARIATION_REG_WEIGHT = 0.001
 _C.LOSS.GRADIENT_PENALTY_WEIGHT = 0
 
+# wight option
 _C.LOSS.GANLOSS_FN = 'BCE'      # BCE, MSE, RelativeLoss, HingeLoss, RelativeAverageLoss, RelativeHingeLoss, RelativeHingeLossFix, WassersteinLoss
 _C.LOSS.GEN_L1 = True
 _C.LOSS.RECONSTRUCTION_LOSS = True
@@ -119,12 +121,6 @@ _C.LOSS.VGG_LOSS = False
 _C.LOSS.GEN_VGG = 'before'      # TODO
 _C.LOSS.STYLE_LOSS = False
 _C.LOSS.VARIATION_REGURALIZATION = False
-
-_C.LOSS.MIXUP = False
-_C.LOSS.L1MOVE = 0
-_C.LOSS.FOCAL_GAMMA = 0
-
-_C.LOSS.BLUR_AUG = False
 
 #########################################################################
 
@@ -138,3 +134,4 @@ _C.DATASETS.EVAL = ('div8k_minival',)
 _C.DATASETS.TEST = ('div8k_test',)
 _C.DATASETS.VIS = ('div8k_minitrain',)
 _C.DATASETS.EDGE = False
+_C.DATASETS.BLUR_AUG = False

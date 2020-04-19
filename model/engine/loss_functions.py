@@ -5,7 +5,6 @@ import torch.nn.functional as F
 
 from model.utils.misc import _sigmoid
 
-
 class VariationRegularizationLoss(nn.Module):
     def __init__(self):
         super(VariationRegularizationLoss, self).__init__()
@@ -280,7 +279,6 @@ class Generator_Loss(nn.Module):
             style_loss = self.style_loss_fn(sr_images, hr_images)
             total_loss += self.style_loss_weight * style_loss
             loss_dict['style_loss'] = style_loss.item()
-            # print(style_loss)
 
         if self.variation_reg_fn is not None:
             reg_loss = self.variation_reg_fn(sr_images)
@@ -297,10 +295,7 @@ class Generator_Loss(nn.Module):
             total_loss += self.gan_loss_weight * gan_loss
             loss_dict['gan_loss'] = gan_loss_stats
 
-        # return total_loss
         return total_loss, loss_dict
-        # return recon_loss + self.w1*gan_loss
-        # return self.w1*gan_loss
 
 
 class Discriminator_Loss(nn.Module):
