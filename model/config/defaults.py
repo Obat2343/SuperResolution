@@ -12,7 +12,7 @@ _C.SCALE_FACTOR = 16
 _C.PATCH_SIZE = 32
 _C.NUM_GPUS = 4
 _C.NUM_WORKERS = 24
-_C.BATCH_SIZE = 8
+_C.BATCH_SIZE = 4
 _C.MAX_ITER = 1000000
 
 _C.OUTPUT_DIR = 'output'
@@ -67,7 +67,7 @@ _C.GEN.SCHEDULER.GAMMA = 0.1
 
 # generator option for gan
 _C.GEN.SOLVER.TRAIN_RATIO = 1
-_C.GEN.TRAIN_START = 10000
+_C.GEN.TRAIN_START = 0
 
 #########################################################################
 

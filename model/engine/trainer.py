@@ -8,7 +8,7 @@ import torch.nn as nn
 
 # import apex
 
-from model.utils.misc import str2bool, check_mkdir, save_torch_img, fix_model_state_dict, chop_forward, debug_set
+from model.utils.misc import str2bool, check_mkdir, save_torch_img, fix_model_state_dict, chop_forward, debug_set, save_checkpoint, load_checkpoint
 from .loss_functions import Generator_Loss, Discriminator_Loss
 
 
@@ -41,11 +41,14 @@ def do_train(args, cfg, model, optimizer, d_optimizer, train_loader, eval_loader
     g_loss_fn = Generator_Loss(args, cfg).to(device)
     d_loss_fn = Discriminator_Loss(args, cfg).to(device)
 
+    
     if args.resume_iter > 0:
-        model.sr_model.load_state_dict(torch.load(os.path.join(cfg.OUTPUT_DIR, 'generator', 'iteration_{}.pth'.format(args.resume_iter))))
-        optimizer.load_state_dict(torch.load(os.path.join(cfg.OUTPUT_DIR, 'g_optimizer', 'iteration_{}.pth'.format(args.resume_iter))))
-        model.discriminators.load_state_dict(torch.load(os.path.join(cfg.OUTPUT_DIR, 'discriminator', 'iteration_{}.pth'.format(args.resume_iter))))
-        d_optimizer.load_state_dict(torch.load(os.path.join(cfg.OUTPUT_DIR, 'd_optimizer', 'iteration_{}.pth'.format(args.resume_iter))))
+        g_checkpoint_path = os.path.join(cfg.OUTPUT_DIR, 'generator', 'iteration_{}.pth'.format(args.resume_iter))
+        d_checkpoint_path = os.path.join(cfg.OUTPUT_DIR, 'discriminator', 'iteration_{}.pth'.format(args.resume_iter))
+        model.sr_model, optimizer, g_scheduler = load_checkpoint(model.sr_model, optimizer, g_scheduler, g_checkpoint_path)
+        model.discriminators, d_optimizer, d_scheduler = load_checkpoint(model.sr_model, d_optimizer, d_scheduler, d_checkpoint_path)
+    else:
+        model.sr_model, _, _ = load_checkpoint(model.sr_model, optimizer, g_scheduler, args.load_model_path)
 
     if cfg.NUM_GPUS > 1:
         model = torch.nn.DataParallel(model, device_ids=list(range(cfg.NUM_GPUS)))
@@ -80,11 +83,11 @@ def do_train(args, cfg, model, optimizer, d_optimizer, train_loader, eval_loader
                 real_losses.append(real_loss)
                 fake_losses.append(fake_loss)
 
-                if cfg.DIS.SOLVER.GRADIENT_PENALTY_WEIGHT != 0:
+                if cfg.LOSS.GRADIENT_PENALTY_WEIGHT != 0:
                     gradient_penalty = model(sr_images, hr_images, grad_penalty=True).mean()
                     gradient_penalties.append(gradient_penalty)
 
-            if cfg.DIS.SOLVER.GRADIENT_PENALTY_WEIGHT != 0:
+            if cfg.LOSS.GRADIENT_PENALTY_WEIGHT != 0:
                 mean_real_loss, mean_fake_loss, mean_gradient_penalty = sum(real_losses) / len(real_losses), sum(fake_losses) / len(fake_losses), sum(gradient_penalties) / len(gradient_penalties)
                 d_loss = mean_real_loss + mean_fake_loss + cfg.DIS.SOLVER.GRADIENT_PENALTY_WEIGHT * mean_gradient_penalty
             else:
@@ -92,7 +95,7 @@ def do_train(args, cfg, model, optimizer, d_optimizer, train_loader, eval_loader
                 d_loss = mean_real_loss + mean_fake_loss
 
             # update discriminator parametor
-            if (cfg.DEBUG.GEN == True) and (iteration >= cfg.GEN.TRAIN_START):
+            if iteration >= cfg.GEN.TRAIN_START:
                 pass
             else:              
                 if args.mixed_precision:
@@ -205,24 +208,17 @@ def do_train(args, cfg, model, optimizer, d_optimizer, train_loader, eval_loader
         # checkpoint
         if iteration % args.save_step == 0:
             generator_path = os.path.join(cfg.OUTPUT_DIR, 'generator', 'iteration_{}.pth'.format(iteration))
-            g_optimizer_path = os.path.join(cfg.OUTPUT_DIR, 'g_optimizer', 'iteration_{}.pth'.format(iteration))
             discriminator_path = os.path.join(cfg.OUTPUT_DIR, 'discriminator', 'iteration_{}.pth'.format(iteration))
-            d_optimizer_path = os.path.join(cfg.OUTPUT_DIR, 'd_optimizer', 'iteration_{}.pth'.format(iteration))
             
             check_mkdir(generator_path)
-            check_mkdir(g_optimizer_path)
             check_mkdir(discriminator_path)
-            check_mkdir(d_optimizer_path)
 
             if cfg.NUM_GPUS > 1:
-                torch.save(model.module.sr_model.state_dict(), generator_path)
-                torch.save(model.module.discriminators.state_dict(), discriminator_path)
+                save_checkpoint(model.module.sr_model, optimizer, g_scheduler)
+                save_checkpoint(model.module.discriminators, d_optimizer, d_scheduler)
             else:
-                torch.save(model.sr_model.state_dict(), generator_path)
-                torch.save(model.discriminators.state_dict(), discriminator_path)
-            torch.save(optimizer.state_dict(), g_optimizer_path)
-            
-            torch.save(d_optimizer.state_dict(), d_optimizer_path)
+                save_checkpoint(model.sr_model, optimizer, g_scheduler)
+                save_checkpoint(model.discriminators, d_optimizer, d_scheduler)
 
             print('=====> Save checkpoint to {}'.format(generator_path))
 
@@ -237,10 +233,13 @@ def do_pretrain(args, cfg, model, optimizer, train_loader, eval_loader, device, 
 
     # load model from iter x
     if args.resume_iter > 0:
-        model.sr_model.load_state_dict(fix_model_state_dict(torch.load(os.path.join(cfg.OUTPUT_DIR, 'generator', 'iteration_{}.pth'.format(args.resume_iter)))))
-        optimizer.load_state_dict(torch.load(os.path.join(cfg.OUTPUT_DIR, 'g_optimizer', 'iteration_{}.pth'.format(args.resume_iter))))
-        print('resume from {}'.format(cfg.OUTPUT_DIR))
-
+        if len(args.load_model_path) > 0:
+            checkpoint_path =  args.load_model_path
+        else:
+            checkpoint_path =  os.path.join(cfg.OUTPUT_DIR, 'generator', 'iteration_{}.pth'.format(args.resume_iter))
+        
+        model.sr_model, optimizer, g_scheduler = load_checkpoint(model.sr_model, optimizer, g_scheduler, checkpoint_path)
+    
     # convert model to multi gpu model
     if cfg.NUM_GPUS > 1:
         model = torch.nn.DataParallel(model, device_ids=list(range(cfg.NUM_GPUS)))
@@ -342,9 +341,8 @@ def do_pretrain(args, cfg, model, optimizer, train_loader, eval_loader, device, 
             check_mkdir(g_optimizer_path)
 
             if cfg.NUM_GPUS > 1:
-                torch.save(model.module.sr_model.state_dict(), generator_path)
+                save_checkpoint(model.module.sr_model, optimizer, g_scheduler, generator_path)
             else:
-                torch.save(model.sr_model.state_dict(), generator_path)
-            torch.save(optimizer.state_dict(), g_optimizer_path)
-
+                save_checkpoint(model.sr_model, optimizer, g_scheduler, generator_path)
+            
             print('=====> Save checkpoint to {}'.format(generator_path))

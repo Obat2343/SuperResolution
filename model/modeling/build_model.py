@@ -123,7 +123,7 @@ def build_model(cfg, pretrain=False):
         print('generator: {}'.format(cfg.GEN.NAME))
         return MODEL(cfg, generator)
     else:
-        discriminator_name_list = list(cfg.SOLVER.DISCRIMINATOR_TYPE)
+        discriminator_name_list = list(cfg.DIS.NAME)
         discriminator_name_list.sort()
         discriminator_list = []
         print(discriminator_name_list)
@@ -149,7 +149,7 @@ def build_model(cfg, pretrain=False):
         if 'AllUNetPix' in discriminator_name_list:
             discriminator_list.append(AllUNetDiscriminatorPixelshuffle(cfg, num_channels=num_channels))
 
-        print('generator: {}'.format(cfg.BASE_MODEL_NAME))
+        print('generator: {}'.format(cfg.GEN.NAME))
         print('discriminator list')
         print(discriminator_list)
 

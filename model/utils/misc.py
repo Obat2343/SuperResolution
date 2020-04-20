@@ -12,6 +12,24 @@ import collections
 def str2bool(s):
     return s.lower() in ('true', '1')
 
+def save_checkpoint(model,optimizer,scheduler,file_path):
+    checkpoint = {}
+    checkpoint['model'] = model.state_dict()
+    checkpoint['optimizer'] = optimizer.state_dict()
+    if scheduler != None:
+        checkpoint['scheduler'] = scheduler.state_dict()
+    else:
+        checkpoint['scheduler'] = scheduler
+    torch.save(checkpoint,file_path)
+
+def load_checkpoint(model, optimizer, scheduler, checkpoint_path):
+    checkpoint = torch.load(checkpoint_path)
+    model.load_state_dict(checkpoint['model'])
+    optimizer.load_state_dict(checkpoint['optimizer'])
+    if scheduler != None:
+        scheduler.load_state_dict(checkpoint['scheduler'])
+    
+    return model, optimizer, scheduler
 
 def check_mkdir(path):
     if not os.path.exists(os.path.dirname(path)):

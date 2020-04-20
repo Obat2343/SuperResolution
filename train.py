@@ -41,14 +41,6 @@ def train(args, cfg):
     if args.sync_batchnorm:
         model = convert_model(model).to(device)
 
-    # load pretrain model
-    if not args.pretrain:
-        print('pretrain model was loaded from {}'.format(cfg.PRETRAIN_MODEL))
-        model.sr_model.load_state_dict(fix_model_state_dict(torch.load(cfg.PRETRAIN_MODEL, map_location=lambda storage, loc:storage)))
-        if len(cfg.PRETRAIN_D_MODEL) > 0:
-            print('pretrain discriminator model was loaded from {}'.format(cfg.PRETRAIN_D_MODEL))
-            model.discriminators.load_state_dict(fix_model_state_dict(torch.load(cfg.PRETRAIN_D_MODEL, map_location=lambda storage, loc:storage)))
-
     # build train dataset
     print('Loading datasets...')
     train_transform = TrainAugmentation(cfg)
@@ -127,6 +119,7 @@ def main():
     parser.add_argument('-r','--resume_iter', type=int, default=0, help='')
     parser.add_argument('-p','--pretrain', type=str2bool, default=False, help='')
     parser.add_argument('-s','--sync_batchnorm', type=str2bool, default=False, help='')
+    parser.add_argument('-l','--load_model_path', type=str, default='', help='')
 
     args = parser.parse_args()
 
@@ -141,6 +134,7 @@ def main():
         output_dirname = str(dt_now.date()) + '_' + str(dt_now.time())
     else:
         output_dirname = args.output_dirname
+
     cfg.OUTPUT_DIR = os.path.join(cfg.OUTPUT_DIR, output_dirname)
     cfg.freeze()
 
